@@ -128,6 +128,8 @@ sub check_status
         my $value_type = $value_cfg{type};
         if ($value_type eq 'bool') {
             check_status_bool(\%value_cfg, $value);
+        } elsif ($value_type =~ m/^float/) {
+            check_status_float(\%value_cfg, $value);
         }
     }
 #    foreach my $value_cfg (@values) {
@@ -155,6 +157,36 @@ sub check_status_bool
     $mp->add_perfdata(
         label     => $value_cfg{label},
         value     => $value,
+    );
+    $mp->add_message($check_status, $value_cfg{label} . ': ' .  $value);
+}
+
+sub check_status_float
+{
+    my $check_status;
+
+    my $f = shift;
+    my %value_cfg = %{$f};
+    my $value = shift;
+    my ($type_name, $type_modifier, $type_mod_value) = split /,/, $value_cfg{type};
+    if (defined $type_modifier && defined $type_mod_value) {
+        if ($type_modifier eq '/') {
+            $value /= $type_mod_value;
+        } elsif ($type_modifier eq '*') {
+            $value *= $type_mod_value;
+        }
+    }
+
+    $mp->add_perfdata(
+        label     => $value_cfg{label},
+        value     => $value,
+        warning   => $value_cfg{threshold_warning},
+        critical  => $value_cfg{threshold_critical},
+    );
+    $check_status = $mp->check_threshold(
+        check     => $value,
+        warning   => $value_cfg{threshold_warning},
+        critical  => $value_cfg{threshold_critical},
     );
     $mp->add_message($check_status, $value_cfg{label} . ': ' .  $value);
 }
