@@ -129,7 +129,7 @@ sub check_status
         );
         my $value = $result->{'1.3.6.1.4.1.34796.' . $value_cfg{oid}};
         my $value_type = $value_cfg{type};
-        if ($value_type eq 'bool') {
+        if ($value_type =~ m/^bool/) {
             check_status_bool(\%value_cfg, $value);
         } elsif ($value_type =~ m/^float/) {
             check_status_float(\%value_cfg, $value);
@@ -151,6 +151,8 @@ sub check_status_bool
     my $f = shift;
     my %value_cfg = %{$f};
     my $value = shift;
+    my ($type_name, $text_false, $text_true) = split /,/, $value_cfg{type};
+
     my $check_status = OK;
     if (defined $value_cfg{threshold_warning} && $value_cfg{threshold_warning} == $value) {
         $check_status = WARNING;
@@ -161,7 +163,13 @@ sub check_status_bool
         label     => $value_cfg{label},
         value     => $value,
     );
-    $mp->add_message($check_status, $value_cfg{label} . ': ' .  $value);
+    my $msg = $value;
+    if (defined $text_false && $value == 0) {
+      $msg = $text_false . "($value)";
+    } elsif (defined $text_true && $value == 1) {
+      $msg = $text_true . "($value)";
+    }
+    $mp->add_message($check_status, $value_cfg{label} . ': ' . $msg);
 }
 
 sub check_status_float
