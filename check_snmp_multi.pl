@@ -74,13 +74,14 @@ wrap_exit($code, $message);
 sub check_status
 {
     my $label;
+    my $label_uom;
     my $uom;
     my $type;
     my $i;
     my @values;
     foreach my $value (@{$mp->opts->value}) {
         ($label, $value) = split /=/, $value, 2;
-        ($label, $uom) = split /;/, $label, 2;
+        ($label, $label_uom, $uom) = split /;/, $label, 3;
 
         my ($oid_value, $threshold) = split /;/, $value;
         my ($oid_type, $oid) = split /:/, $oid_value;
@@ -101,6 +102,7 @@ sub check_status
 
         my %foo = (
             'label'              => $label,
+            'label_uom'          => $label_uom,
             'uom'                => $uom,
             'oid'                => $oid,
             'threshold_warning'  => $threshold_warning,
@@ -200,7 +202,7 @@ sub check_status_float
         warning   => $value_cfg{threshold_warning},
         critical  => $value_cfg{threshold_critical},
     );
-    $mp->add_message($check_status, $value_cfg{label} . ': ' .  $value . ($value_cfg{uom} // ""));
+    $mp->add_message($check_status, $value_cfg{label} . ': ' .  $value . ($value_cfg{label_uom} // ""));
 }
 
 sub wrap_exit
