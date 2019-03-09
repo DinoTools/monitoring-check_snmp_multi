@@ -48,6 +48,12 @@ $mp->add_arg(
 );
 
 $mp->add_arg(
+    spec    => 'base=s',
+    help    => 'Base oid',
+    default => '1.3.6.1.4.1.34796',
+);
+
+$mp->add_arg(
     spec    => 'value=s@',
     help    => 'Values to monitor',
     default => []
@@ -70,6 +76,17 @@ check_status();
 
 my ($code, $message) = $mp->check_messages();
 wrap_exit($code, $message);
+
+sub build_oid
+{
+    my ($base_oid, $oid) = @_;
+    $base_oid =~ s/(\s|[.])+$//;
+    $oid =~ s/^(\s|[.])+//;
+    if(length($base_oid) > 0) {
+        return $base_oid . '.' . $oid;
+    }
+    return $oid;
+}
 
 sub check_status
 {
@@ -124,12 +141,14 @@ sub check_status
 #    $result = $session->get_request(
 #        -varbindlist => $request_values
 #    );
+    my $base_oid = $mp->opts->base;
     for ($i=0; $i < scalar(@values); $i++) {
         my %value_cfg = %{$values[$i]};
+        my $oid = build_oid($base_oid, $value_cfg{oid});
         $result = $session->get_request(
-            -varbindlist => ['1.3.6.1.4.1.34796.' . $value_cfg{oid}]
+            -varbindlist => [$oid]
         );
-        my $value = $result->{'1.3.6.1.4.1.34796.' . $value_cfg{oid}};
+        my $value = $result->{$oid};
         my $value_type = $value_cfg{type};
         if ($value_type =~ m/^bool/) {
             check_status_bool(\%value_cfg, $value);
