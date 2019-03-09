@@ -87,7 +87,6 @@ sub build_oid
     $oid =~ s/^\s+//;
     # Use oid if it starts with .
     if ($oid =~ /^\./) {
-      print($oid);
       $oid =~ s/^(\s|\.)+//;
       return $oid;
     }
