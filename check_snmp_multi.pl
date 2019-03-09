@@ -83,12 +83,16 @@ wrap_exit($code, $message);
 sub build_oid
 {
     my ($base_oid, $oid) = @_;
-    $base_oid =~ s/(\s|[.])+$//;
-    $oid =~ s/^(\s|[.])+//;
-    if(length($base_oid) > 0) {
-        return $base_oid . '.' . $oid;
+    # Remove white space
+    $oid =~ s/^\s+//;
+    # Use oid if it starts with .
+    if ($oid =~ /^\./) {
+      print($oid);
+      $oid =~ s/^(\s|\.)+//;
+      return $oid;
     }
-    return $oid;
+    $base_oid =~ s/(\s|[.])+$//;
+    return $base_oid . '.' . $oid;
 }
 
 sub check_status
