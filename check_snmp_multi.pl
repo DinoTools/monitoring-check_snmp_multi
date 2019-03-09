@@ -157,6 +157,8 @@ sub check_status
             check_status_bool(\%value_cfg, $value);
         } elsif ($value_type =~ m/^float/) {
             check_status_float(\%value_cfg, $value);
+        } elsif ($value_type =~ m/^str/) {
+            check_status_string(\%value_cfg, $value);
         }
     }
 #    foreach my $value_cfg (@values) {
@@ -225,6 +227,17 @@ sub check_status_float
         critical  => $value_cfg{threshold_critical},
     );
     $mp->add_message($check_status, $value_cfg{label} . ': ' .  $value . ($value_cfg{label_uom} // ""));
+}
+
+sub check_status_string
+{
+    my $check_status;
+
+    my $f = shift;
+    my %value_cfg = %{$f};
+    my $value = shift;
+    $mp->add_message(OK, $value_cfg{label} . ': ' .  $value . ($value_cfg{label_uom} // ""));
+
 }
 
 sub wrap_exit
