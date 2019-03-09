@@ -51,7 +51,7 @@ $mp->add_arg(
 );
 
 $mp->add_arg(
-    spec    => 'base=s',
+    spec    => 'base:s',
     help    => 'Base oid',
     default => '1.3.6.1.4.1.34796',
 );
