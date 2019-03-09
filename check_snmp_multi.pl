@@ -2,8 +2,6 @@
 use strict;
 use warnings FATAL => 'all';
 
-use Class::Load qw(try_load_class is_class_loaded);
-
 use Net::SNMP;
 
 use constant OK         => 0;
@@ -16,17 +14,22 @@ my $pkg_nagios_available = 0;
 my $pkg_monitoring_available = 0;
 
 BEGIN {
-    $pkg_nagios_available = try_load_class('Nagios::Plugin');
-    $pkg_monitoring_available = try_load_class('Monitoring::Plugin');
-    if($pkg_monitoring_available == 1) {
+    eval {
         require Monitoring::Plugin;
         require Monitoring::Plugin::Functions;
-        require Monitoring::Plugin::Threshold;
-    } elsif ($pkg_nagios_available == 1) {
-        require Nagios::Plugin;
-        require Nagios::Plugin::Functions;
-        require Nagios::Plugin::Threshold;
-        *Monitoring::Plugin:: = *Nagios::Plugin::;
+        $pkg_monitoring_available = 1;
+    };
+    if (!$pkg_monitoring_available) {
+        eval {
+            require Nagios::Plugin;
+            require Nagios::Plugin::Functions;
+            *Monitoring::Plugin:: = *Nagios::Plugin::;
+            $pkg_nagios_available = 1;
+        };
+    }
+    if (!$pkg_monitoring_available && !$pkg_nagios_available) {
+        print("UNKNOWN - Unable to find module Monitoring::Plugin or Nagios::Plugin\n");
+        exit UNKNOWN;
     }
 }
 
