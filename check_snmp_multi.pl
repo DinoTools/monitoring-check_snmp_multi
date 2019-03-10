@@ -170,8 +170,6 @@ sub check_status
     for (my $i=0; $i < scalar(@values); $i++) {
         my %value_cfg = %{$values[$i]};
         my $oid = build_oid($base_oid, $value_cfg{oid}, $loop_value);
-        print($oid);
-        print("\n");
         $result = $session->get_request(
             -varbindlist => [$oid]
         );
