@@ -12,6 +12,7 @@ use constant DEPENDENT  => 4;
 
 my $pkg_nagios_available = 0;
 my $pkg_monitoring_available = 0;
+my @g_long_message;
 
 BEGIN {
     eval {
@@ -62,6 +63,24 @@ $mp->add_arg(
     default => []
 );
 
+$mp->add_arg(
+    spec    => 'loop_start=i',
+    help    => '',
+    default => undef,
+);
+
+$mp->add_arg(
+    spec    => 'loop_stop=i',
+    help    => '',
+    default => undef,
+);
+
+$mp->add_arg(
+    spec    => 'loop_value=s@',
+    help    => 'Values to monitor',
+    default => []
+);
+
 $mp->getopts;
 
 #Open SNMP Session
@@ -75,67 +94,67 @@ if (!defined($session)) {
     wrap_exit(UNKNOWN, $error)
 }
 
-check_status();
+check();
 
 my ($code, $message) = $mp->check_messages();
-wrap_exit($code, $message);
+wrap_exit($code, $message . "\n" . join("\n", @g_long_message));
 
 sub build_oid
 {
-    my ($base_oid, $oid) = @_;
+    my ($base_oid, $oid, $loop_value) = @_;
     # Remove white space
     $oid =~ s/^\s+//;
     # Use oid if it starts with .
     if ($oid =~ /^\./) {
       $oid =~ s/^(\s|\.)+//;
-      return $oid;
+      return build_oid_loop($oid, $loop_value);
     }
     $base_oid =~ s/(\s|[.])+$//;
-    return $base_oid . '.' . $oid;
+    return build_oid_loop($base_oid . '.' . $oid, $loop_value);
+}
+
+sub build_oid_loop
+{
+    my ($oid, $loop_value) = @_;
+    if (defined $loop_value) {
+      $oid =~ s/\$id/$loop_value/;
+    }
+    return $oid;
+}
+
+sub check
+{
+    my @values;
+    my @loop_values;
+
+    foreach my $value (@{$mp->opts->value}) {
+        my $value_cfg = parse_value_config($value);
+        push @values, $value_cfg;
+    }
+    check_status(\@values);
+
+
+    if(defined $mp->opts->loop_start && defined $mp->opts->loop_stop) {
+        foreach my $value (@{$mp->opts->loop_value}) {
+            my $value_cfg = parse_value_config($value);
+            push @loop_values, $value_cfg;
+        }
+        for(my $i=$mp->opts->loop_start; $i <= $mp->opts->loop_stop; $i++) {
+            if ($i > $mp->opts->loop_start) {
+                push @g_long_message, '';
+            }
+            push @g_long_message, sprintf("Loop: %d", $i);
+            push @g_long_message, "=======";
+            push @g_long_message, '';
+            check_status(\@loop_values, $i);
+        }
+    }
 }
 
 sub check_status
 {
-    my $label;
-    my $label_uom;
-    my $uom;
-    my $type;
-    my $i;
-    my @values;
-    foreach my $value (@{$mp->opts->value}) {
-        ($label, $value) = split /=/, $value, 2;
-        ($label, $label_uom, $uom) = split /;/, $label, 3;
-
-        my ($oid_value, $threshold) = split /;/, $value;
-        my ($oid_type, $oid) = split /:/, $oid_value;
-        if (!defined $oid) {
-            $oid = $oid_type;
-            $oid_type = 'int';
-        }
-        my ($threshold_warning, $threshold_critical);
-        if (defined $threshold) {
-            ($threshold_warning, $threshold_critical) = split /,/, $threshold;
-            if (defined $threshold_warning && $threshold_warning eq "") {
-                undef $threshold_warning;
-            }
-            if (defined $threshold_critical && $threshold_critical eq "") {
-                undef $threshold_critical;
-            }
-        }
-
-        my %foo = (
-            'label'              => $label,
-            'label_uom'          => $label_uom,
-            'uom'                => $uom,
-            'oid'                => $oid,
-            'threshold_warning'  => $threshold_warning,
-            'threshold_critical' => $threshold_critical,
-            'type'               => $oid_type,
-        );
-
-        push @values, \%foo;
-
-    }
+    my ($values_ref, $loop_value) = @_;
+    my @values = @{$values_ref};
 
     my $request_values = [];
     my $result;
@@ -148,20 +167,22 @@ sub check_status
 #        -varbindlist => $request_values
 #    );
     my $base_oid = $mp->opts->base;
-    for ($i=0; $i < scalar(@values); $i++) {
+    for (my $i=0; $i < scalar(@values); $i++) {
         my %value_cfg = %{$values[$i]};
-        my $oid = build_oid($base_oid, $value_cfg{oid});
+        my $oid = build_oid($base_oid, $value_cfg{oid}, $loop_value);
+        print($oid);
+        print("\n");
         $result = $session->get_request(
             -varbindlist => [$oid]
         );
         my $value = $result->{$oid};
         my $value_type = $value_cfg{type};
         if ($value_type =~ m/^bool/) {
-            check_status_bool(\%value_cfg, $value);
+            check_status_bool(\%value_cfg, $value, $loop_value);
         } elsif ($value_type =~ m/^float/) {
-            check_status_float(\%value_cfg, $value);
+            check_status_float(\%value_cfg, $value, $loop_value);
         } elsif ($value_type =~ m/^str/) {
-            check_status_string(\%value_cfg, $value);
+            check_status_string(\%value_cfg, $value, $loop_value);
         }
     }
 #    foreach my $value_cfg (@values) {
@@ -177,9 +198,8 @@ sub check_status
 
 sub check_status_bool
 {
-    my $f = shift;
+    my ($f, $value, $loop_value) = @_;
     my %value_cfg = %{$f};
-    my $value = shift;
     my ($type_name, $text_false, $text_true) = split /,/, $value_cfg{type};
 
     my $check_status = OK;
@@ -205,9 +225,8 @@ sub check_status_float
 {
     my $check_status;
 
-    my $f = shift;
+    my ($f, $value, $loop_value) = @_;
     my %value_cfg = %{$f};
-    my $value = shift;
     my ($type_name, $type_modifier, $type_mod_value) = split /,/, $value_cfg{type};
     if (defined $type_modifier && defined $type_mod_value) {
         if ($type_modifier eq '/') {
@@ -236,11 +255,61 @@ sub check_status_string
 {
     my $check_status;
 
-    my $f = shift;
+    my ($f, $value, $loop_value) = @_;
     my %value_cfg = %{$f};
-    my $value = shift;
-    $mp->add_message(OK, $value_cfg{label} . ': ' .  $value . ($value_cfg{label_uom} // ""));
+    wrap_add_message(OK, $value_cfg{label} . ': ' .  $value . ($value_cfg{label_uom} // ""), $loop_value);
+}
 
+sub parse_value_config
+{
+    my $value = shift;
+    my $label;
+    my $label_uom;
+    my $uom;
+    my $type;
+    my $i;
+
+    ($label, $value) = split /=/, $value, 2;
+    ($label, $label_uom, $uom) = split /;/, $label, 3;
+
+    my ($oid_value, $threshold) = split /;/, $value;
+    my ($oid_type, $oid) = split /:/, $oid_value;
+    if (!defined $oid) {
+        $oid = $oid_type;
+        $oid_type = 'int';
+    }
+    my ($threshold_warning, $threshold_critical);
+    if (defined $threshold) {
+        ($threshold_warning, $threshold_critical) = split /,/, $threshold;
+        if (defined $threshold_warning && $threshold_warning eq "") {
+            undef $threshold_warning;
+        }
+        if (defined $threshold_critical && $threshold_critical eq "") {
+            undef $threshold_critical;
+        }
+    }
+
+    my %foo = (
+        'label'              => $label,
+        'label_uom'          => $label_uom,
+        'uom'                => $uom,
+        'oid'                => $oid,
+        'threshold_warning'  => $threshold_warning,
+        'threshold_critical' => $threshold_critical,
+        'type'               => $oid_type,
+    );
+    return \%foo;
+}
+
+sub wrap_add_message
+{
+    my ($check_status, $message, $loop_value) = @_;
+    if (defined $loop_value) {
+        push @g_long_message, '  * ' . $message;
+    }
+    if (!defined $loop_value || $check_status != OK) {
+        $mp->add_message($check_status, $message);
+    }
 }
 
 sub wrap_exit
