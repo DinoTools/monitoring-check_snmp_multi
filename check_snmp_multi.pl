@@ -3,6 +3,7 @@ use strict;
 use warnings FATAL => 'all';
 
 use Net::SNMP;
+use Pod::Text::Termcap;
 
 use constant OK         => 0;
 use constant WARNING    => 1;
@@ -34,9 +35,60 @@ BEGIN {
     }
 }
 
+my $parser = Pod::Text::Termcap->new (sentence => 0, width => 78);
+my $extra_doc = <<'END_MESSAGE';
+
+=head1 Examples
+
+Get two strings with custom OID
+
+=head2 Example 1
+
+B<Command>:
+
+./check_snmp_multi.pl -C community -H hostname --value="Get String=string:.1.2.3" --value="Get 2nd string=string:.1.2.4"
+
+B<Output>:
+
+check_snmp_multi OK - Get String: Test Get 2nd string: Test 2
+
+=cut
+
+=head2 Example 2
+
+B<Command>:
+
+./check_snmp_multi.pl -C community -H hostname --loop_start=1 --loop_stop=2 --loop_value="Version=string:.1.2.3.\$id" --loop_value="Hardware=string:.1.2.4.\$id"
+
+B<Output>:
+
+check_snmp_multi OK
+
+Loop: 1
+
+=======
+
+  * Version: 1.0
+  * Hardware: 0031
+
+Loop: 2
+
+=======
+
+  * Version: 1.0
+  * Hardware: 0199
+=cut
+
+END_MESSAGE
+
+my $extra_doc_output;
+$parser->output_string(\$extra_doc_output);
+$parser->parse_string_document($extra_doc);
+
 my $mp = Monitoring::Plugin->new(
     shortname => "check_snmp_multi",
-    usage => ""
+    usage => "",
+    extra => $extra_doc_output
 );
 
 $mp->add_arg(
